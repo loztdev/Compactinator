@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#0b0e14" />
+<title>Compactinator</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --bg-soft: #11151f;
+    --panel: #151b27;
+    --panel-2: #1b2230;
+    --border: #232c3d;
+    --border-soft: #1c2433;
+    --text: #e6eaf2;
+    --muted: #8a94a7;
+    --muted-2: #5f6a7d;
+    --accent: #5b8cff;
+    --accent-2: #7aa2ff;
+    --good: #38d39f;
+    --warn: #ffcc66;
+    --bad: #ff6b81;
+    --radius: 14px;
+    --shadow: 0 8px 30px rgba(0,0,0,0.45);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 100% -10%, #16203a 0%, transparent 55%),
+      radial-gradient(1000px 500px at -10% 0%, #1a1430 0%, transparent 50%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 18px 16px 60px;
+  }
+
+  header.app {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .logo {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    background: linear-gradient(150deg, var(--accent), #9b6bff);
+    display: grid; place-items: center;
+    font-size: 22px;
+    box-shadow: var(--shadow);
+    flex: 0 0 auto;
+  }
+  .title h1 { margin: 0; font-size: 20px; letter-spacing: 0.2px; }
+  .title p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--bg-soft));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow);
+  }
+
+  label.field { display: block; margin-bottom: 12px; }
+  label.field:last-child { margin-bottom: 0; }
+  .lbl { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; font-weight: 600; letter-spacing: 0.2px; }
+  .hint { color: var(--muted-2); font-weight: 400; }
+
+  input[type="text"], input[type="password"], input[type="number"], select, textarea {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 11px 12px;
+    font: inherit;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(91,140,255,0.18);
+  }
+  textarea { resize: vertical; min-height: 150px; line-height: 1.45; }
+  select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) center, calc(100% - 13px) center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 34px; }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 0; min-width: 0; }
+
+  .key-row { display: flex; gap: 8px; }
+  .key-row input { flex: 1 1 auto; }
+  .icon-btn {
+    flex: 0 0 auto;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 0 12px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  button.primary {
+    width: 100%;
+    background: linear-gradient(180deg, var(--accent-2), var(--accent));
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(91,140,255,0.35);
+    transition: transform .08s, filter .15s;
+  }
+  button.primary:active { transform: translateY(1px); }
+  button.primary:disabled { filter: grayscale(0.5) brightness(0.7); cursor: not-allowed; box-shadow: none; }
+
+  .ghost-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 9px 12px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+  }
+  .ghost-btn:hover { border-color: var(--accent); }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat {
+    background: var(--panel-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .stat .v { font-size: 22px; font-weight: 800; letter-spacing: 0.3px; line-height: 1.1; }
+  .stat .k { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.6px; }
+  .stat .sub { font-size: 11px; color: var(--muted-2); margin-top: 3px; }
+  .stat.accuracy .v { color: var(--good); }
+  .stat.tokens .v { color: var(--accent-2); }
+  .stat.rate .v { color: var(--warn); }
+
+  .accordion summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: 700; font-size: 14px;
+  }
+  .accordion summary::-webkit-details-marker { display: none; }
+  .accordion summary .chev { color: var(--muted); transition: transform .2s; }
+  .accordion[open] summary .chev { transform: rotate(90deg); }
+  .accordion .body { margin-top: 14px; }
+
+  .status {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--muted); font-size: 13px; min-height: 20px;
+    margin-top: 12px;
+  }
+  .spinner {
+    width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.18);
+    border-top-color: var(--accent-2);
+    animation: spin .8s linear infinite;
+    flex: 0 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .out-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .out-head .lbl { margin: 0; }
+
+  .log { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .log .line { font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+  .log .line .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; transform: translateY(1px); }
+  .log .line.ok .dot { background: var(--good); }
+  .log .line.warn .dot { background: var(--warn); }
+
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .pill.good { background: rgba(56,211,159,0.15); color: var(--good); }
+  .pill.warn { background: rgba(255,204,102,0.15); color: var(--warn); }
+  .pill.bad  { background: rgba(255,107,129,0.15); color: var(--bad); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px);
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 16px; border-radius: 999px; font-size: 13px; box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .err { color: var(--bad); font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
+  .muted-note { color: var(--muted-2); font-size: 12px; margin-top: 10px; }
+  a { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app">
+    <div class="logo">🗜️</div>
+    <div class="title">
+      <h1>Compactinator</h1>
+      <p>Accuracy-first context compaction · OpenRouter</p>
+    </div>
+  </header>
+
+  <!-- Settings -->
+  <div class="card">
+    <details class="accordion" id="settings">
+      <summary>⚙️ Settings <span class="chev">›</span></summary>
+      <div class="body">
+        <label class="field">
+          <span class="lbl">OpenRouter API key <span class="hint">— stored only in this browser</span></span>
+          <div class="key-row">
+            <input type="password" id="apiKey" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false" />
+            <button class="icon-btn" id="toggleKey" type="button">Show</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span class="lbl">Model</span>
+          <div class="key-row">
+            <select id="model"><option value="">Loading models…</option></select>
+            <button class="icon-btn" id="reloadModels" type="button">↻</button>
+          </div>
+        </label>
+
+        <div class="row">
+          <label class="field">
+            <span class="lbl">Target accuracy</span>
+            <select id="target">
+              <option value="100">100% (lossless)</option>
+              <option value="99">99%</option>
+              <option value="95">95%</option>
+              <option value="90">90%</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="lbl">Max refine passes</span>
+            <input type="number" id="maxPasses" min="0" max="8" value="4" />
+          </label>
+        </div>
+        <p class="muted-note">Compactinator compacts your text, then independently audits the result for any dropped
+          facts and re-compacts to restore them — looping until it hits the target accuracy. Compression is sacrificed
+          for fidelity by design.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- Input -->
+  <div class="card">
+    <label class="field" style="margin:0">
+      <span class="lbl">Text to compact <span class="hint" id="inMeta"></span></span>
+      <textarea id="input" placeholder="Paste a long conversation, transcript, document, or context dump here…"></textarea>
+    </label>
+    <div class="row" style="margin-top:12px">
+      <button class="ghost-btn" id="pasteBtn" type="button">📋 Paste</button>
+      <button class="ghost-btn" id="clearBtn" type="button">🗑 Clear</button>
+      <button class="ghost-btn" id="sampleBtn" type="button">✨ Sample</button>
+    </div>
+    <button class="primary" id="runBtn" type="button" style="margin-top:14px">Compact</button>
+    <div class="status" id="status"></div>
+    <div class="err" id="error" style="display:none"></div>
+  </div>
+
+  <!-- Trackers -->
+  <div class="card">
+    <div class="stats">
+      <div class="stat tokens">
+        <div class="v" id="stTokens">—</div>
+        <div class="k">Tokens</div>
+        <div class="sub" id="stTokensSub">in / out content</div>
+      </div>
+      <div class="stat rate">
+        <div class="v" id="stRate">—</div>
+        <div class="k">Compaction</div>
+        <div class="sub" id="stRateSub">reduction</div>
+      </div>
+      <div class="stat accuracy">
+        <div class="v" id="stAcc">—</div>
+        <div class="k">Accuracy</div>
+        <div class="sub" id="stAccSub">est. fidelity</div>
+      </div>
+    </div>
+    <div class="status" id="usageLine" style="margin-top:12px"></div>
+  </div>
+
+  <!-- Output -->
+  <div class="card" id="outCard" style="display:none">
+    <div class="out-head">
+      <span class="lbl">Compacted output</span>
+      <button class="ghost-btn" id="copyBtn" type="button">Copy</button>
+    </div>
+    <textarea id="output" readonly></textarea>
+    <details class="accordion" id="logWrap" style="margin-top:14px">
+      <summary>🔎 Audit trail <span class="chev">›</span></summary>
+      <div class="body"><div class="log" id="log"></div></div>
+    </details>
+  </div>
+
+  <p class="muted-note" style="text-align:center">
+    Runs entirely in your browser · key never leaves your device · works offline-installable on Android (Add to Home screen).
+  </p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const OR_BASE = "https://openrouter.ai/api/v1";
+  const LS = {
+    key: "compactinator.key",
+    model: "compactinator.model",
+    target: "compactinator.target",
+    passes: "compactinator.passes",
+    usage: "compactinator.usage",
+  };
+
+  // ---- token estimate (no external tokenizer; ~4 chars/token heuristic) ----
+  const estTokens = (s) => {
+    if (!s) return 0;
+    // blend char- and word-based estimates for a stable approximation
+    const chars = s.length;
+    const words = (s.trim().match(/\S+/g) || []).length;
+    return Math.max(1, Math.round((chars / 4 + words * 1.3) / 2));
+  };
+  const fmt = (n) => n.toLocaleString();
+
+  // ---- cumulative API usage (cost tracking across session) ----
+  let usage = loadUsage();
+  function loadUsage() {
+    try { return JSON.parse(localStorage.getItem(LS.usage)) || { prompt: 0, completion: 0, calls: 0 }; }
+    catch { return { prompt: 0, completion: 0, calls: 0 }; }
+  }
+  function saveUsage() { localStorage.setItem(LS.usage, JSON.stringify(usage)); }
+  function renderUsage() {
+    const total = usage.prompt + usage.completion;
+    $("usageLine").innerHTML = total
+      ? `<span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted)"></span>
+         Session API usage: <strong style="color:var(--text)">&nbsp;${fmt(total)}</strong>&nbsp;tokens
+         <span class="hint" style="color:var(--muted-2)">&nbsp;(${fmt(usage.prompt)} prompt + ${fmt(usage.completion)} completion · ${usage.calls} calls)</span>`
+      : `<span class="hint" style="color:var(--muted-2)">Session API usage will appear here.</span>`;
+  }
+
+  // ---- persisted settings ----
+  function restore() {
+    $("apiKey").value = localStorage.getItem(LS.key) || "";
+    $("target").value = localStorage.getItem(LS.target) || "100";
+    $("maxPasses").value = localStorage.getItem(LS.passes) || "4";
+    if (!$("apiKey").value) $("settings").open = true;
+  }
+  $("apiKey").addEventListener("input", () => localStorage.setItem(LS.key, $("apiKey").value.trim()));
+  $("target").addEventListener("change", () => localStorage.setItem(LS.target, $("target").value));
+  $("maxPasses").addEventListener("change", () => localStorage.setItem(LS.passes, $("maxPasses").value));
+  $("model").addEventListener("change", () => localStorage.setItem(LS.model, $("model").value));
+
+  $("toggleKey").addEventListener("click", () => {
+    const f = $("apiKey");
+    const show = f.type === "password";
+    f.type = show ? "text" : "password";
+    $("toggleKey").textContent = show ? "Hide" : "Show";
+  });
+
+  // ---- toast ----
+  let toastT;
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove("show"), 1800);
+  }
+
+  // ---- input meta ----
+  function updateInMeta() {
+    const v = $("input").value;
+    $("inMeta").textContent = v ? `— ~${fmt(estTokens(v))} tokens` : "";
+  }
+  $("input").addEventListener("input", updateInMeta);
+
+  $("pasteBtn").addEventListener("click", async () => {
+    try { $("input").value = await navigator.clipboard.readText(); updateInMeta(); }
+    catch { toast("Clipboard blocked — paste manually"); }
+  });
+  $("clearBtn").addEventListener("click", () => { $("input").value = ""; updateInMeta(); });
+  $("sampleBtn").addEventListener("click", () => { $("input").value = SAMPLE; updateInMeta(); });
+  $("copyBtn").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("output").value); toast("Copied"); }
+    catch { toast("Copy failed"); }
+  });
+
+  // ---- models ----
+  async function loadModels() {
+    const sel = $("model");
+    sel.innerHTML = `<option value="">Loading models…</option>`;
+    try {
+      const r = await fetch(`${OR_BASE}/models`);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = (await r.json()).data || [];
+      data.sort((a, b) => a.id.localeCompare(b.id));
+      const saved = localStorage.getItem(LS.model);
+      sel.innerHTML = "";
+      for (const m of data) {
+        const o = document.createElement("option");
+        o.value = m.id;
+        const ctx = m.context_length ? ` · ${Math.round(m.context_length / 1000)}k` : "";
+        o.textContent = (m.name || m.id) + ctx;
+        sel.appendChild(o);
+      }
+      const def = saved && data.some(m => m.id === saved) ? saved
+        : (data.some(m => m.id === "anthropic/claude-3.5-sonnet") ? "anthropic/claude-3.5-sonnet" : (data[0] && data[0].id));
+      sel.value = def || "";
+    } catch (e) {
+      sel.innerHTML = `<option value="">Couldn't load — type a model id below</option>`;
+      // fallback: let user free-type by swapping to text input
+      const inp = document.createElement("input");
+      inp.type = "text"; inp.id = "model"; inp.placeholder = "e.g. anthropic/claude-3.5-sonnet";
+      inp.value = localStorage.getItem(LS.model) || "anthropic/claude-3.5-sonnet";
+      inp.addEventListener("change", () => localStorage.setItem(LS.model, inp.value.trim()));
+      sel.replaceWith(inp);
+    }
+  }
+  $("reloadModels").addEventListener("click", loadModels);
+
+  // ---- OpenRouter chat call ----
+  async function chat(messages, { json = false, temperature = 0.2 } = {}) {
+    const key = $("apiKey").value.trim();
+    const model = ($("model").value || "").trim();
+    if (!key) throw new Error("Add your OpenRouter API key in Settings.");
+    if (!model) throw new Error("Pick a model in Settings.");
+
+    const body = { model, messages, temperature };
+    if (json) body.response_format = { type: "json_object" };
+
+    const r = await fetch(`${OR_BASE}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + key,
+        "Content-Type": "application/json",
+        "HTTP-Referer": location.origin || "https://compactinator.local",
+        "X-Title": "Compactinator",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = (data && data.error && data.error.message) || ("HTTP " + r.status);
+      throw new Error(msg);
+    }
+    if (data.usage) {
+      usage.prompt += data.usage.prompt_tokens || 0;
+      usage.completion += data.usage.completion_tokens || 0;
+      usage.calls += 1;
+      saveUsage(); renderUsage();
+    }
+    const content = data.choices && data.choices[0] && data.choices[0].message
+      ? data.choices[0].message.content : "";
+    return (content || "").trim();
+  }
+
+  // ---- prompts ----
+  const COMPACT_SYS =
+    "You are a lossless context compactor. Rewrite the user's text into the most compact form possible " +
+    "WITHOUT losing any information. Preserve every fact, name, number, date, quantity, decision, requirement, " +
+    "edge case, code identifier, and causal/temporal relationship. You MAY remove filler, redundancy, pleasantries, " +
+    "and rephrasing, and you MAY use terse notation, lists, and abbreviations as long as meaning is fully recoverable. " +
+    "Do NOT summarize away details, do NOT generalize specifics, do NOT add new information. " +
+    "Output ONLY the compacted text, with no preamble or commentary.";
+
+  const AUDIT_SYS =
+    "You are a strict fidelity auditor. You receive an ORIGINAL text and a COMPACTED version. " +
+    "Determine whether the compacted version preserves ALL information from the original. " +
+    "List every concrete piece of information present in the ORIGINAL but missing, altered, or weakened in the COMPACTED " +
+    "version (facts, names, numbers, dates, conditions, nuances). Ignore changes to wording/style/order that don't lose meaning. " +
+    "Respond ONLY as JSON: {\"accuracy\": <integer 0-100 = % of original information preserved>, " +
+    "\"missing\": [\"specific item 1\", ...]}. If nothing is lost, accuracy is 100 and missing is [].";
+
+  function parseJSON(s) {
+    if (!s) return null;
+    let t = s.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+    try { return JSON.parse(t); } catch {}
+    const m = t.match(/\{[\s\S]*\}/);
+    if (m) { try { return JSON.parse(m[0]); } catch {} }
+    return null;
+  }
+
+  // ---- UI helpers ----
+  function setStatus(msg, busy) {
+    $("status").innerHTML = busy ? `<span class="spinner"></span><span>${msg}</span>` : (msg ? `<span>${msg}</span>` : "");
+  }
+  function showError(msg) {
+    const e = $("error");
+    if (!msg) { e.style.display = "none"; e.textContent = ""; return; }
+    e.style.display = "block"; e.textContent = "⚠ " + msg;
+  }
+  function addLog(text, cls) {
+    const d = document.createElement("div");
+    d.className = "line" + (cls ? " " + cls : "");
+    d.innerHTML = `<span class="dot"></span><span>${text}</span>`;
+    $("log").appendChild(d);
+  }
+  function accPill(acc) {
+    const cls = acc >= 100 ? "good" : acc >= 90 ? "warn" : "bad";
+    return `<span class="pill ${cls}">${acc}%</span>`;
+  }
+
+  // ---- main run ----
+  let running = false;
+  async function run() {
+    if (running) return;
+    const original = $("input").value.trim();
+    if (!original) { toast("Paste some text first"); return; }
+
+    running = true;
+    $("runBtn").disabled = true;
+    showError("");
+    $("log").innerHTML = "";
+    $("outCard").style.display = "block";
+    $("output").value = "";
+    $("stAcc").textContent = "—"; $("stRate").textContent = "—"; $("stTokens").textContent = "—";
+
+    const target = parseInt($("target").value, 10);
+    const maxPasses = Math.max(0, Math.min(8, parseInt($("maxPasses").value, 10) || 0));
+    const origTok = estTokens(original);
+
+    try {
+      // Pass 1: initial compaction
+      setStatus("Compacting…", true);
+      let compacted = await chat([
+        { role: "system", content: COMPACT_SYS },
+        { role: "user", content: original },
+      ]);
+      addLog(`Initial compaction → ~${fmt(estTokens(compacted))} tokens`);
+
+      let acc = 0, missing = [];
+      let pass = 0;
+      while (true) {
+        setStatus("Auditing fidelity…", true);
+        const auditRaw = await chat([
+          { role: "system", content: AUDIT_SYS },
+          { role: "user", content: `ORIGINAL:\n"""\n${original}\n"""\n\nCOMPACTED:\n"""\n${compacted}\n"""` },
+        ], { json: true, temperature: 0 });
+        const audit = parseJSON(auditRaw) || { accuracy: 0, missing: ["(could not parse audit response)"] };
+        acc = Math.max(0, Math.min(100, Math.round(audit.accuracy)));
+        missing = Array.isArray(audit.missing) ? audit.missing : [];
+
+        // live trackers
+        const compTok = estTokens(compacted);
+        renderTrackers(origTok, compTok, acc);
+
+        if (acc >= target || missing.length === 0) {
+          addLog(`Audit: ${acc}% fidelity — target met ✓`, "ok");
+          break;
+        }
+        addLog(`Audit: ${acc}% fidelity — ${missing.length} item(s) to restore`, "warn");
+        missing.slice(0, 12).forEach(m => addLog("• " + m, "warn"));
+
+        if (pass >= maxPasses) {
+          addLog(`Reached max refine passes (${maxPasses}); stopping at ${acc}%.`, "warn");
+          break;
+        }
+        pass++;
+        setStatus(`Refining (pass ${pass}/${maxPasses})…`, true);
+        compacted = await chat([
+          { role: "system", content: COMPACT_SYS },
+          { role: "user", content:
+            `Here is the ORIGINAL text:\n"""\n${original}\n"""\n\n` +
+            `Here is a COMPACTED draft that is MISSING the following information:\n- ${missing.join("\n- ")}\n\n` +
+            `Produce a corrected compaction that keeps everything already present AND restores every missing item above. ` +
+            `Stay as compact as possible while being fully lossless. Output ONLY the compacted text.` },
+        ]);
+        addLog(`Refined compaction (pass ${pass}) → ~${fmt(estTokens(compacted))} tokens`);
+      }
+
+      $("output").value = compacted;
+      renderTrackers(origTok, estTokens(compacted), acc);
+      setStatus(`Done · ${accPill(acc)} fidelity`, false);
+    } catch (e) {
+      showError(e.message || String(e));
+      setStatus("", false);
+    } finally {
+      running = false;
+      $("runBtn").disabled = false;
+    }
+  }
+
+  function renderTrackers(origTok, compTok, acc) {
+    $("stTokens").textContent = `${fmt(origTok)}→${fmt(compTok)}`;
+    $("stTokensSub").textContent = "orig → compact (est.)";
+    const saved = origTok > 0 ? Math.round((1 - compTok / origTok) * 100) : 0;
+    $("stRate").textContent = (saved >= 0 ? "" : "+") + Math.abs(saved) + "%";
+    $("stRateSub").textContent = saved >= 0 ? `${fmt(origTok - compTok)} tokens saved` : "expanded for fidelity";
+    $("stAcc").textContent = acc + "%";
+    const accEl = document.querySelector(".stat.accuracy .v");
+    accEl.style.color = acc >= 100 ? "var(--good)" : acc >= 90 ? "var(--warn)" : "var(--bad)";
+  }
+
+  $("runBtn").addEventListener("click", run);
+
+  // ---- sample text ----
+  const SAMPLE =
+`Meeting notes — Project Atlas, 2026-03-14
+Attendees: Priya (PM), Marco (backend), Lena (design), and me.
+
+Priya kicked off by reminding everyone that the launch date is firm: April 30. She said marketing has already booked the announcement, so we cannot slip.
+
+Marco reported that the new auth service is at 80% completion. The remaining work is the refresh-token rotation and rate limiting (target: 100 requests/minute per user). He flagged a risk: the legacy database still uses MD5 password hashes for about 12,000 old accounts, and we agreed to force a password reset for those users on first login after launch.
+
+Lena walked through the redesigned onboarding. Key decision: we drop the 5-step wizard down to 3 steps. The email verification step moves to AFTER the first dashboard view, not before, because analytics showed a 23% drop-off at verification. Lena will deliver final Figma specs by March 21.
+
+Budget: we have $48,000 left. Marco needs roughly $9,000 for a load-testing contractor. Priya approved it on the condition that we get a fixed-price quote first.
+
+Open action items:
+1. Marco — finish token rotation + rate limiting by April 10.
+2. Lena — Figma specs by March 21.
+3. Me — write the password-reset migration plan and share by March 18.
+4. Priya — get the fixed-price load-testing quote.
+
+We also briefly discussed moving to GraphQL but tabled it until after launch.`;
+
+  // ---- init ----
+  restore();
+  renderUsage();
+  updateInMeta();
+  loadModels();
+})();
+</script>
+</body>
+</html>
