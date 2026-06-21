@@ -163,10 +163,39 @@
   }
   .editbox .erow { display: flex; gap: 8px; margin-top: 8px; }
 
+  .think {
+    margin-bottom: 6px; border: 1px solid var(--border-soft); border-radius: 10px;
+    background: rgba(91,140,255,0.04); max-width: 92%;
+  }
+  .think summary {
+    list-style: none; cursor: pointer; padding: 7px 11px;
+    font-size: 11.5px; font-weight: 700; color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .think summary::-webkit-details-marker { display: none; }
+  .think summary::before { content: "▸"; transition: transform .15s; }
+  .think[open] summary::before { transform: rotate(90deg); }
+  .think-body {
+    padding: 0 11px 10px; font-size: 12.5px; line-height: 1.5; color: var(--muted);
+    white-space: pre-wrap; word-wrap: break-word; font-style: italic;
+  }
+
   .typing { display: inline-flex; gap: 4px; padding: 4px 0; }
   .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bounce 1.2s infinite; }
   .typing i:nth-child(2){ animation-delay: .15s; } .typing i:nth-child(3){ animation-delay: .3s; }
   @keyframes bounce { 0%,60%,100%{ transform: translateY(0); opacity:.4 } 30%{ transform: translateY(-5px); opacity:1 } }
+
+  /* ---------- Jump to latest ---------- */
+  .jumpBtn {
+    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 78px);
+    transform: translateX(-50%) translateY(8px);
+    background: var(--panel-3); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 16px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+    box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s; z-index: 25;
+  }
+  .jumpBtn.show { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+  .jumpBtn:active { background: var(--panel-2); }
 
   /* ---------- Composer ---------- */
   .composer {
@@ -321,6 +350,7 @@
 
   <!-- Messages -->
   <div class="messages" id="messages"></div>
+  <button class="jumpBtn" id="jumpBtn">↓ Jump to latest</button>
 
   <!-- Composer -->
   <div class="composer">
@@ -361,6 +391,19 @@
         <div class="keyrow">
           <select class="sel" id="model"><option value="">Loading…</option></select>
           <button class="minibtn" id="reloadModels">↻</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lbl">Model thinking <span class="hint">— show reasoning tokens, when the model supports them</span></span>
+        <div class="keyrow">
+          <label style="display:flex;align-items:center;gap:8px;flex:1 1 auto;background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px;">
+            <input type="checkbox" id="reasoningEnabled" /> Show thinking
+          </label>
+          <select class="sel" id="reasoningEffort" style="flex:0 0 auto;width:auto">
+            <option value="low">Low effort</option>
+            <option value="medium">Medium effort</option>
+            <option value="high">High effort</option>
+          </select>
         </div>
       </div>
       <div class="row">
@@ -503,6 +546,7 @@
     s.chats = s.chats || {};
     s.prompts = s.prompts || {};
     s.settings = Object.assign({ key:"", model:"", target:"100", passes:"4" }, s.settings || {});
+    s.settings.reasoning = Object.assign({ enabled:true, effort:"medium" }, s.settings.reasoning || {});
     s.usage = s.usage || { prompt:0, completion:0, calls:0 };
     s.lastCompaction = s.lastCompaction || null;
     return s;
@@ -545,13 +589,16 @@
     box.innerHTML = "";
     for (const m of current.messages) box.appendChild(messageEl(m));
     scrollBottom();
+    updateJumpBtn();
   }
   function messageEl(m) {
     const wrap = document.createElement("div");
     wrap.className = "msg " + m.role;
     wrap.dataset.id = m.id;
     const isA = m.role === "assistant";
+    const hasThink = isA && m.reasoning;
     wrap.innerHTML = `<div class="who">${isA ? "🤖 Assistant" : "🧑 You"}</div>
+      ${isA ? `<details class="think" style="${hasThink ? '' : 'display:none'}"${m.streaming && hasThink && !m.content ? ' open' : ''}><summary>🧠 Thinking</summary><div class="think-body"></div></details>` : ''}
       <div class="bubble"><div class="md">${renderMarkdown(m.content) || (m.streaming ? typing() : "")}</div></div>
       <div class="actions">
         <button class="act" data-a="copy">Copy</button>
@@ -559,11 +606,26 @@
         ${isA ? '<button class="act" data-a="regen">Regenerate</button>' : ''}
         <button class="act danger" data-a="del">Delete</button>
       </div>`;
+    if (hasThink) wrap.querySelector(".think-body").textContent = m.reasoning;
     wrap.querySelectorAll(".act").forEach(b => b.addEventListener("click", () => msgAction(b.dataset.a, m.id)));
     return wrap;
   }
   const typing = () => `<span class="typing"><i></i><i></i><i></i></span>`;
-  function scrollBottom() { const b=$("messages"); b.scrollTop = b.scrollHeight; }
+
+  /* ---------- scroll follow ---------- */
+  let autoScroll = true;
+  let userScrollIntent = false; // set by real user gestures (wheel/touch), so programmatic scrolls can't falsely disable autoScroll
+  function nearBottom(threshold=56) {
+    const b = $("messages");
+    return b.scrollHeight - b.scrollTop - b.clientHeight <= threshold;
+  }
+  function scrollBottom() { const b=$("messages"); b.scrollTo({ top: b.scrollHeight, behavior: "instant" }); }
+  function followScroll() { if (autoScroll) scrollBottom(); }
+  function updateJumpBtn() {
+    const b = $("messages");
+    const hasOverflow = b.scrollHeight - b.clientHeight > 4;
+    $("jumpBtn").classList.toggle("show", !autoScroll && hasOverflow);
+  }
 
   function renderChatList() {
     const q = ($("chatSearch").value || "").toLowerCase();
@@ -586,8 +648,8 @@
   }
 
   /* ============ chat ops ============ */
-  function openChat(id) { current = state.chats[id]; renderAll(); }
-  function newChat() { current = blankChat(); current.model = state.settings.model; state.chats[current.id] = current; saveNow(); renderAll(); $("composer").focus(); }
+  function openChat(id) { current = state.chats[id]; autoScroll = true; renderAll(); }
+  function newChat() { current = blankChat(); current.model = state.settings.model; state.chats[current.id] = current; autoScroll = true; saveNow(); renderAll(); $("composer").focus(); }
   function deleteChat(id) {
     if (!confirm("Delete this chat?")) return;
     delete state.chats[id];
@@ -658,15 +720,18 @@
 
   // streaming (used by chat UI)
   let abortCtl = null;
-  async function streamChat(messages, onDelta) {
+  async function streamChat(messages, onDelta, onReasoning) {
     const key = state.settings.key.trim();
     const model = (current.model || state.settings.model || "").trim();
     if (!key) throw new Error("Add your OpenRouter API key in Settings (⚙️).");
     if (!model) throw new Error("Pick a model in Settings (⚙️).");
     abortCtl = new AbortController();
+    const body = { model, messages, temperature:0.7, stream:true, stream_options:{include_usage:true} };
+    if (state.settings.reasoning && state.settings.reasoning.enabled) {
+      body.reasoning = { effort: state.settings.reasoning.effort || "medium" };
+    }
     const r = await fetch(`${OR}/chat/completions`, {
-      method:"POST", headers: headers(key), signal: abortCtl.signal,
-      body: JSON.stringify({ model, messages, temperature:0.7, stream:true, stream_options:{include_usage:true} })
+      method:"POST", headers: headers(key), signal: abortCtl.signal, body: JSON.stringify(body)
     });
     if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error((e.error && e.error.message) || ("HTTP "+r.status)); }
     const reader = r.body.getReader(), dec = new TextDecoder();
@@ -682,8 +747,17 @@
         const p = t.slice(5).trim();
         if (p === "[DONE]") continue;
         let j; try { j = JSON.parse(p); } catch { continue; }
-        const d = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+        const delta = j.choices && j.choices[0] && j.choices[0].delta;
+        const d = delta && delta.content;
         if (d) onDelta(d);
+        if (onReasoning && delta) {
+          let rtxt = "";
+          if (typeof delta.reasoning === "string") rtxt = delta.reasoning;
+          else if (Array.isArray(delta.reasoning_details)) {
+            rtxt = delta.reasoning_details.map(rd => rd && rd.text || "").join("");
+          }
+          if (rtxt) onReasoning(rtxt);
+        }
         if (j.usage) usage = j.usage;
       }
     }
@@ -705,27 +779,49 @@
     $("composer").value = ""; autoGrow($("composer"));
     current.messages.push({ id: uid(), role:"user", content: text });
     if (current.title === "New chat" || !current.title) { current.title = text.replace(/\s+/g," ").slice(0,42); renderTitle(); }
+    autoScroll = true;
     touch(); renderMessages(); renderTokens(); renderChatList();
     await generate();
   }
   async function generate(replaceId) {
     setBusy(true);
+    autoScroll = true;
     let target;
-    if (replaceId) { target = current.messages.find(m=>m.id===replaceId); target.content=""; target.streaming=true; }
-    else { target = { id: uid(), role:"assistant", content:"", streaming:true }; current.messages.push(target); }
+    if (replaceId) { target = current.messages.find(m=>m.id===replaceId); target.content=""; target.reasoning=""; target.streaming=true; }
+    else { target = { id: uid(), role:"assistant", content:"", reasoning:"", streaming:true }; current.messages.push(target); }
     renderMessages();
-    const bubble = () => $("messages").querySelector(`.msg[data-id="${target.id}"] .md`);
+    const msgEl = () => $("messages").querySelector(`.msg[data-id="${target.id}"]`);
+    const bubble = () => { const m=msgEl(); return m && m.querySelector(".md"); };
+    const thinkBox = () => { const m=msgEl(); return m && m.querySelector(".think"); };
+    const thinkBody = () => { const m=msgEl(); return m && m.querySelector(".think-body"); };
     let raf = null;
-    const paint = () => { raf=null; const el=bubble(); if(el) el.innerHTML = renderMarkdown(target.content) || typing(); scrollBottom(); };
+    const paint = () => {
+      raf=null;
+      const el=bubble(); if(el) el.innerHTML = renderMarkdown(target.content) || typing();
+      const tb = thinkBox();
+      if (tb) {
+        tb.style.display = target.reasoning ? "block" : "none";
+        if (target.streaming && target.reasoning && !target.content) tb.open = true;
+        const body = thinkBody(); if (body) body.textContent = target.reasoning;
+      }
+      followScroll();
+      updateJumpBtn();
+    };
     try {
       const upto = current.messages.indexOf(target);
       await streamChat(buildAPIMessages(upto), (d) => {
         target.content += d;
         if (!raf) raf = requestAnimationFrame(paint);
+      }, (r) => {
+        target.reasoning += r;
+        if (!raf) raf = requestAnimationFrame(paint);
       });
       target.streaming = false;
       if (raf) cancelAnimationFrame(raf);
       const el = bubble(); if (el) el.innerHTML = renderMarkdown(target.content) || "<em class='hint'>(empty response)</em>";
+      const tb = thinkBox();
+      if (tb) { tb.style.display = target.reasoning ? "block" : "none"; tb.open = false; const body=thinkBody(); if (body) body.textContent = target.reasoning; }
+      followScroll(); updateJumpBtn();
       touch(); renderTokens(); renderChatList();
     } catch (e) {
       target.streaming = false;
@@ -812,7 +908,7 @@
         <button data-load>Load</button><button data-del>🗑</button>`;
       el.querySelector(".pr-name").textContent = p.name;
       el.querySelector(".pr-prev").textContent = p.content.slice(0,60);
-      el.querySelector("[data-load]").addEventListener("click", ()=>{ $("sysPrompt").value=p.content; });
+      el.querySelector("[data-load]").addEventListener("click", ()=>{ $("sysPrompt").value=p.content; current.system=p.content; touch(); renderSysChip(); renderTokens(); });
       el.querySelector("[data-del]").addEventListener("click", ()=>{ if(confirm("Delete prompt?")){ delete state.prompts[id]; save(); renderPromptLib(); }});
       box.appendChild(el);
     }
@@ -883,6 +979,15 @@
   $("composer").addEventListener("input", (e)=>autoGrow(e.target));
   $("composer").addEventListener("keydown", (e)=>{ if(e.key==="Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); send(); }});
 
+  $("messages").addEventListener("wheel", () => { userScrollIntent = true; }, { passive: true });
+  $("messages").addEventListener("touchmove", () => { userScrollIntent = true; }, { passive: true });
+  $("messages").addEventListener("scroll", () => {
+    if (userScrollIntent) { autoScroll = nearBottom(); userScrollIntent = false; }
+    else if (nearBottom()) { autoScroll = true; }
+    updateJumpBtn();
+  });
+  $("jumpBtn").addEventListener("click", () => { autoScroll = true; scrollBottom(); updateJumpBtn(); });
+
   // modals open
   $("settingsBtn").addEventListener("click", ()=>openModal("settingsModal"));
   $("statsChip").addEventListener("click", ()=>{ renderUsage(); renderStatHints(); openModal("statsModal"); });
@@ -900,6 +1005,8 @@
   // settings
   $("apiKey").addEventListener("input", ()=>{ state.settings.key=$("apiKey").value.trim(); save(); });
   $("toggleKey").addEventListener("click", ()=>{ const f=$("apiKey"); const show=f.type==="password"; f.type=show?"text":"password"; $("toggleKey").textContent=show?"Hide":"Show"; });
+  $("reasoningEnabled").addEventListener("change", ()=>{ state.settings.reasoning.enabled=$("reasoningEnabled").checked; save(); });
+  $("reasoningEffort").addEventListener("change", ()=>{ state.settings.reasoning.effort=$("reasoningEffort").value; save(); });
   $("target").addEventListener("change", ()=>{ state.settings.target=$("target").value; save(); });
   $("maxPasses").addEventListener("change", ()=>{ state.settings.passes=$("maxPasses").value; save(); });
   $("model").addEventListener("change", ()=>{ state.settings.model=$("model").value; current.model=$("model").value; save(); renderModelChip(); });
@@ -932,6 +1039,8 @@
   /* ============ init ============ */
   ensureCurrent();
   $("apiKey").value = state.settings.key || "";
+  $("reasoningEnabled").checked = !!state.settings.reasoning.enabled;
+  $("reasoningEffort").value = state.settings.reasoning.effort || "medium";
   $("target").value = state.settings.target || "100";
   $("maxPasses").value = state.settings.passes || "4";
   renderAll(); renderUsage(); renderStatHints();
