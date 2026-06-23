@@ -18,6 +18,11 @@ re-compacts to restore it — looping until it hits your target fidelity (defaul
 - **System prompts** per chat, plus a **saved-prompt library** (name, load, delete).
 - **Live model list** from OpenRouter (per-chat model), with a free-type fallback.
 
+### Attachments
+- **File uploads** — attach **images**, **PDFs**, and **text/code files** to any message via 📎 (or just paste an image into the composer).
+- Images are sent inline for vision models, PDFs as file parts, and text files inlined as text — using OpenRouter's standard multimodal format. Use a model that supports the file type.
+- Attachments are **stored with the chat** (capped per file) so they persist, export, and import alongside your messages; their text is included in compaction.
+
 ### Saving & files
 - **Auto-save** — every chat continuously saves itself to its existing record; re-saving updates in place instead of duplicating. No save button needed.
 - **Save all chats** — one-tap export of every chat + prompt to a single backup file.
@@ -54,5 +59,6 @@ rather than duplicated.
 
 ## Privacy
 
-Everything runs client-side. Your API key and text are sent **only** to the
-OpenRouter API directly from your browser. Nothing is sent anywhere else.
+Everything runs client-side. Your API key, text, and any attached files are sent
+**only** to the OpenRouter API directly from your browser. Nothing is sent
+anywhere else.
