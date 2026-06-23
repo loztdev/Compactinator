@@ -557,7 +557,13 @@
   }
   function renderMarkdown(src) {
     if (!src) return '';
-    const cb = [];
+    return blockRender(String(src), []);
+  }
+  // The code-block store `cb` is threaded through recursion so fenced blocks
+  // nested inside a blockquote still resolve, instead of crashing on a fresh
+  // empty array. (Re-running the fence regex on recursed content is a no-op:
+  // the fences were already replaced with placeholders at the top level.)
+  function blockRender(src, cb) {
     src = String(src).replace(/```([^\n`]*)\n?([\s\S]*?)```/g, (m,lang,code) => { cb.push(code); return ` CB${cb.length-1} `; });
     const lines = src.replace(/\r\n/g,'\n').split('\n');
     let html = '', i = 0;
@@ -569,7 +575,7 @@
       if (/^\s*$/.test(l)) { i++; continue; }
       if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { html += `<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`; i++; continue; }
       if (/^\s*([-*_])\1\1+\s*$/.test(l)) { html += '<hr>'; i++; continue; }
-      if (/^\s*>\s?/.test(l)) { const buf=[]; while(i<lines.length && /^\s*>\s?/.test(lines[i])){ buf.push(lines[i].replace(/^\s*>\s?/,'')); i++; } html += `<blockquote>${renderMarkdown(buf.join('\n'))}</blockquote>`; continue; }
+      if (/^\s*>\s?/.test(l)) { const buf=[]; while(i<lines.length && /^\s*>\s?/.test(lines[i])){ buf.push(lines[i].replace(/^\s*>\s?/,'')); i++; } html += `<blockquote>${blockRender(buf.join('\n'), cb)}</blockquote>`; continue; }
       if (/^\s*[-*+]\s+/.test(l)) { const it=[]; while(i<lines.length && /^\s*[-*+]\s+/.test(lines[i])){ it.push(lines[i].replace(/^\s*[-*+]\s+/,'')); i++; } html += '<ul>'+it.map(x=>`<li>${inline(x)}</li>`).join('')+'</ul>'; continue; }
       if (/^\s*\d+[.)]\s+/.test(l)) { const it=[]; while(i<lines.length && /^\s*\d+[.)]\s+/.test(lines[i])){ it.push(lines[i].replace(/^\s*\d+[.)]\s+/,'')); i++; } html += '<ol>'+it.map(x=>`<li>${inline(x)}</li>`).join('')+'</ol>'; continue; }
       const buf=[l]; i++;
@@ -1011,7 +1017,7 @@
         const audit = parseJSON(await chat([{role:"system",content:AUDIT_SYS},
           {role:"user",content:`ORIGINAL:\n"""\n${original}\n"""\n\nCOMPACTED:\n"""\n${compacted}\n"""`}], {json:true,temperature:0}))
           || {accuracy:0, missing:["(could not parse audit)"]};
-        acc = Math.max(0, Math.min(100, Math.round(audit.accuracy)));
+        acc = Math.max(0, Math.min(100, Math.round(Number(audit.accuracy) || 0)));
         const missing = Array.isArray(audit.missing) ? audit.missing : [];
         cStats(origTok, estTokens(compacted), acc);
         if (acc >= target || !missing.length) { cLog(`Audit: ${acc}% — target met ✓`, "ok"); break; }
@@ -1203,7 +1209,16 @@
   $("cNewChat").addEventListener("click", ()=>{ const c=$("cOut").value; if(!c) return; newChat(); current.title="Compacted context"; current.messages.push({id:uid(),role:"user",content:"Here is the compacted context of a prior conversation. Continue from here:\n\n"+c}); touch(); closeModals(); renderAll(); });
 
   async function loadModels() {
-    const sel = $("model"); sel.innerHTML = `<option value="">Loading…</option>`;
+    let sel = $("model");
+    // A prior failed load may have swapped the <select> for a free-type <input>.
+    // Restore a real <select> first, otherwise the <option>s below get appended
+    // to an <input> and the picker silently renders nothing.
+    if (sel.tagName !== "SELECT") {
+      const fresh = document.createElement("select"); fresh.id="model"; fresh.className="sel";
+      fresh.addEventListener("change", ()=>{ state.settings.model=fresh.value; current.model=fresh.value; save(); renderModelChip(); });
+      sel.replaceWith(fresh); sel = fresh;
+    }
+    sel.innerHTML = `<option value="">Loading…</option>`;
     try {
       const r = await fetch(`${OR}/models`); if(!r.ok) throw 0;
       const data = ((await r.json()).data||[]).sort((a,b)=>a.id.localeCompare(b.id));
