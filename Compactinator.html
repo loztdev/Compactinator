@@ -217,6 +217,50 @@
   }
   .send:disabled { filter: grayscale(.6) brightness(.7); box-shadow: none; }
   .send.stop { background: linear-gradient(180deg, #ff8a9b, var(--bad)); }
+  .attach {
+    width: 46px; height: 46px; flex: 0 0 auto; border: 1px solid var(--border);
+    border-radius: 14px; background: var(--panel-2); color: var(--muted); font-size: 19px;
+  }
+  .attach:active { background: var(--panel-3); color: var(--text); }
+  .attach:disabled { filter: grayscale(.6) brightness(.7); }
+
+  /* ---------- Attachment tray (pending) ---------- */
+  .attach-tray {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding: 10px 12px 0; flex: 0 0 auto;
+    background: rgba(11,14,20,0.9);
+  }
+  .attach-tray:empty { display: none; }
+  .achip {
+    display: flex; align-items: center; gap: 8px; max-width: 220px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 5px 6px 5px 8px; font-size: 12.5px;
+  }
+  .achip .athumb {
+    width: 30px; height: 30px; flex: 0 0 auto; border-radius: 6px;
+    object-fit: cover; background: var(--panel-3); display: grid; place-items: center; font-size: 16px;
+  }
+  .achip .ameta { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+  .achip .aname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .achip .asize { color: var(--muted-2); font-size: 11px; }
+  .achip .ax {
+    flex: 0 0 auto; border: none; background: transparent; color: var(--muted);
+    font-size: 15px; padding: 2px 4px; border-radius: 6px;
+  }
+  .achip .ax:active { background: var(--panel-3); color: var(--bad); }
+
+  /* ---------- Attachments shown in a message ---------- */
+  .msg-attach { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; max-width: 92%; }
+  .msg.user .msg-attach { justify-content: flex-end; }
+  .att-img { max-width: 200px; max-height: 200px; border-radius: 10px; border: 1px solid var(--border); }
+  .att-file {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 12px; font-size: 12.5px; color: var(--text);
+    text-decoration: none; max-width: 220px;
+  }
+  .att-file .afi { font-size: 18px; }
+  .att-file .an { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ---------- Drawer ---------- */
   .scrim {
@@ -353,9 +397,13 @@
   <button class="jumpBtn" id="jumpBtn">↓ Jump to latest</button>
 
   <!-- Composer -->
+  <div class="attach-tray" id="attachTray"></div>
   <div class="composer">
+    <button class="attach" id="attachBtn" aria-label="Attach files" title="Attach images, PDFs, or text files">📎</button>
     <textarea id="composer" rows="1" placeholder="Message…"></textarea>
     <button class="send" id="sendBtn" aria-label="Send">➤</button>
+    <input type="file" id="attachInput" multiple hidden
+      accept="image/*,application/pdf,text/*,.md,.markdown,.json,.csv,.js,.ts,.jsx,.tsx,.py,.html,.css,.xml,.yaml,.yml,.sh,.java,.c,.cpp,.h,.go,.rs,.rb,.php,.sql,.toml,.ini,.log" />
   </div>
 
   <!-- Drawer -->
@@ -551,9 +599,15 @@
     s.lastCompaction = s.lastCompaction || null;
     return s;
   }
-  let saveT;
-  function save() { clearTimeout(saveT); saveT = setTimeout(() => localStorage.setItem(SK, JSON.stringify(state)), 200); }
-  function saveNow() { localStorage.setItem(SK, JSON.stringify(state)); }
+  let saveT, quotaWarned = false;
+  function persist() {
+    try { localStorage.setItem(SK, JSON.stringify(state)); quotaWarned = false; }
+    catch (e) {
+      if (!quotaWarned) { quotaWarned = true; toast("Storage full — likely a large attachment. It won't survive a reload."); }
+    }
+  }
+  function save() { clearTimeout(saveT); saveT = setTimeout(persist, 200); }
+  function saveNow() { persist(); }
 
   let current = null; // current chat object reference (lives inside state.chats)
   function ensureCurrent() {
@@ -575,7 +629,14 @@
   function renderTitle() { const t=$("chatTitle"); if (document.activeElement!==t) t.textContent = current.title || "New chat"; }
   function renderModelChip() { $("modelName").textContent = (current.model || state.settings.model || "no model").split("/").pop(); }
   function renderSysChip() { $("sysChip").innerHTML = current.system ? "🧠 System ●" : "🧠 System"; }
-  function convoTokens() { return estTokens(current.system) + current.messages.reduce((a,m)=>a+estTokens(m.content),0); }
+  function attachTokens(list) {
+    return (list || []).reduce((a, x) => a + (x.kind === "text" ? estTokens(x.text || "") : x.kind === "pdf" ? 1500 : 1000), 0);
+  }
+  function convoTokens() {
+    let t = estTokens(current.system);
+    for (const m of current.messages) t += estTokens(m.content) + attachTokens(m.attachments);
+    return t + attachTokens(pendingAttachments);
+  }
   function renderTokens() { const t = convoTokens(); $("tokLive").textContent = fmt(t); $("stTok").textContent = fmt(t); }
 
   function renderMessages() {
@@ -599,7 +660,8 @@
     const hasThink = isA && m.reasoning;
     wrap.innerHTML = `<div class="who">${isA ? "🤖 Assistant" : "🧑 You"}</div>
       ${isA ? `<details class="think" style="${hasThink ? '' : 'display:none'}"${m.streaming && hasThink && !m.content ? ' open' : ''}><summary>🧠 Thinking</summary><div class="think-body"></div></details>` : ''}
-      <div class="bubble"><div class="md">${renderMarkdown(m.content) || (m.streaming ? typing() : "")}</div></div>
+      ${attachmentsHtml(m)}
+      ${(isA || m.content || m.streaming) ? `<div class="bubble"><div class="md">${renderMarkdown(m.content) || (m.streaming ? typing() : "")}</div></div>` : ""}
       <div class="actions">
         <button class="act" data-a="copy">Copy</button>
         <button class="act" data-a="edit">Edit</button>
@@ -611,6 +673,17 @@
     return wrap;
   }
   const typing = () => `<span class="typing"><i></i><i></i><i></i></span>`;
+  function attachmentsHtml(m) {
+    if (!m.attachments || !m.attachments.length) return "";
+    const items = m.attachments.map(a => {
+      if (a.kind === "image") return `<img class="att-img" src="${a.dataUrl}" alt="${escapeHtml(a.name)}">`;
+      const href = a.kind === "pdf" ? a.dataUrl : "";
+      const open = href ? ` href="${href}" target="_blank" rel="noopener"` : "";
+      const tag = href ? "a" : "div";
+      return `<${tag} class="att-file"${open}><span class="afi">${attIcon(a.kind)}</span><span class="an">${escapeHtml(a.name)}</span></${tag}>`;
+    }).join("");
+    return `<div class="msg-attach">${items}</div>`;
+  }
 
   /* ---------- scroll follow ---------- */
   let autoScroll = true;
@@ -684,8 +757,21 @@
     const msgs = [];
     if (current.system && current.system.trim()) msgs.push({ role:"system", content: current.system });
     const slice = upto==null ? current.messages : current.messages.slice(0, upto);
-    for (const m of slice) msgs.push({ role: m.role, content: m.content });
+    for (const m of slice) msgs.push({ role: m.role, content: messageContent(m) });
     return msgs;
+  }
+  // Plain string when there are no attachments; otherwise the OpenAI/OpenRouter
+  // multimodal "parts" array (text + image_url + file).
+  function messageContent(m) {
+    if (!m.attachments || !m.attachments.length) return m.content;
+    const parts = [];
+    if (m.content) parts.push({ type:"text", text: m.content });
+    for (const a of m.attachments) {
+      if (a.kind === "image") parts.push({ type:"image_url", image_url:{ url: a.dataUrl } });
+      else if (a.kind === "pdf") parts.push({ type:"file", file:{ filename: a.name, file_data: a.dataUrl } });
+      else parts.push({ type:"text", text: `\n\n--- File: ${a.name} ---\n${a.text || ""}\n--- end of ${a.name} ---` });
+    }
+    return parts.length ? parts : m.content;
   }
   function recordUsage(u) {
     if (!u) return;
@@ -772,13 +858,68 @@
     s.classList.toggle("stop", b);
     s.innerHTML = b ? "■" : "➤";
   }
+  /* ---------- Attachments ---------- */
+  const MAX_ATTACH_BYTES = 1.5 * 1024 * 1024; // per-file cap; base64 in localStorage inflates ~33%
+  let pendingAttachments = []; // [{ id, name, type, kind, dataUrl?, text? }]
+  const fmtBytes = (n) => n < 1024 ? n+" B" : n < 1048576 ? (n/1024).toFixed(0)+" KB" : (n/1048576).toFixed(1)+" MB";
+  function attachKind(type, name) {
+    if (type && type.startsWith("image/")) return "image";
+    if (type === "application/pdf" || /\.pdf$/i.test(name)) return "pdf";
+    return "text"; // .txt/.md/code/json/csv/etc — inlined as a text part
+  }
+  function readFileAttachment(file) {
+    return new Promise((resolve, reject) => {
+      const kind = attachKind(file.type, file.name);
+      const rdr = new FileReader();
+      rdr.onerror = () => reject(new Error("read failed"));
+      if (kind === "text") {
+        rdr.onload = () => resolve({ id: uid(), name: file.name, type: file.type || "text/plain", kind, text: rdr.result });
+        rdr.readAsText(file);
+      } else {
+        rdr.onload = () => resolve({ id: uid(), name: file.name, type: file.type || (kind==="pdf"?"application/pdf":"application/octet-stream"), kind, dataUrl: rdr.result });
+        rdr.readAsDataURL(file);
+      }
+    });
+  }
+  async function addAttachments(fileList) {
+    const files = Array.from(fileList || []);
+    for (const f of files) {
+      if (f.size > MAX_ATTACH_BYTES) { toast(`"${f.name}" is too large (max ${fmtBytes(MAX_ATTACH_BYTES)})`); continue; }
+      try { pendingAttachments.push(await readFileAttachment(f)); }
+      catch { toast(`Couldn't read "${f.name}"`); }
+    }
+    renderAttachTray();
+  }
+  function removeAttachment(id) { pendingAttachments = pendingAttachments.filter(a => a.id !== id); renderAttachTray(); }
+  function attIcon(kind) { return kind === "pdf" ? "📄" : kind === "text" ? "📝" : "📎"; }
+  function renderAttachTray() {
+    const tray = $("attachTray"); tray.innerHTML = "";
+    for (const a of pendingAttachments) {
+      const chip = document.createElement("div"); chip.className = "achip";
+      const thumb = a.kind === "image"
+        ? `<img class="athumb" src="${a.dataUrl}" alt="">`
+        : `<span class="athumb">${attIcon(a.kind)}</span>`;
+      const size = a.kind === "text" ? `${(a.text||"").length} chars` : (a.kind === "pdf" ? "PDF" : "image");
+      chip.innerHTML = `${thumb}<div class="ameta"><span class="aname"></span><span class="asize">${size}</span></div><button class="ax" aria-label="Remove">×</button>`;
+      chip.querySelector(".aname").textContent = a.name;
+      chip.querySelector(".ax").addEventListener("click", () => removeAttachment(a.id));
+      tray.appendChild(chip);
+    }
+    renderTokens();
+  }
+
   async function send() {
     if (busy) { if (abortCtl) abortCtl.abort(); return; }
     const text = $("composer").value.trim();
-    if (!text) return;
+    if (!text && !pendingAttachments.length) return;
     $("composer").value = ""; autoGrow($("composer"));
-    current.messages.push({ id: uid(), role:"user", content: text });
-    if (current.title === "New chat" || !current.title) { current.title = text.replace(/\s+/g," ").slice(0,42); renderTitle(); }
+    const msg = { id: uid(), role:"user", content: text };
+    if (pendingAttachments.length) { msg.attachments = pendingAttachments; pendingAttachments = []; renderAttachTray(); }
+    current.messages.push(msg);
+    if (current.title === "New chat" || !current.title) {
+      const seed = text || (msg.attachments && msg.attachments[0] && msg.attachments[0].name) || "New chat";
+      current.title = seed.replace(/\s+/g," ").slice(0,42); renderTitle();
+    }
     autoScroll = true;
     touch(); renderMessages(); renderTokens(); renderChatList();
     await generate();
@@ -842,7 +983,14 @@
   function parseJSON(s){ if(!s) return null; let t=s.trim().replace(/^```(?:json)?/i,"").replace(/```$/,"").trim(); try{return JSON.parse(t);}catch{} const m=t.match(/\{[\s\S]*\}/); if(m){try{return JSON.parse(m[0]);}catch{}} return null; }
   function transcript() {
     let s = current.system ? `[SYSTEM]\n${current.system}\n\n` : "";
-    s += current.messages.map(m => `[${m.role.toUpperCase()}]\n${m.content}`).join("\n\n");
+    s += current.messages.map(m => {
+      let body = m.content || "";
+      for (const a of (m.attachments || [])) {
+        if (a.kind === "text") body += `\n\n[ATTACHED FILE: ${a.name}]\n${a.text || ""}`;
+        else body += `\n\n[ATTACHED ${a.kind.toUpperCase()}: ${a.name}]`;
+      }
+      return `[${m.role.toUpperCase()}]\n${body.trim()}`;
+    }).join("\n\n");
     return s.trim();
   }
   function cLog(t, cls){ const d=document.createElement("div"); d.className="line"+(cls?" "+cls:""); d.innerHTML=`<span class="dot"></span><span>${escapeHtml(t)}</span>`; $("cLog").appendChild(d); }
@@ -1007,6 +1155,13 @@
   $("sendBtn").addEventListener("click", send);
   $("composer").addEventListener("input", (e)=>autoGrow(e.target));
   $("composer").addEventListener("keydown", (e)=>{ if(e.key==="Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); send(); }});
+  $("attachBtn").addEventListener("click", ()=>$("attachInput").click());
+  $("attachInput").addEventListener("change", (e)=>{ addAttachments(e.target.files); e.target.value=""; });
+  // Paste an image straight into the composer
+  $("composer").addEventListener("paste", (e)=>{
+    const files = Array.from(e.clipboardData?.files || []);
+    if (files.length) { e.preventDefault(); addAttachments(files); }
+  });
 
   $("messages").addEventListener("wheel", () => { userScrollIntent = true; }, { passive: true });
   $("messages").addEventListener("touchmove", () => { userScrollIntent = true; }, { passive: true });
